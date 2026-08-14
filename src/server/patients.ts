@@ -24,7 +24,10 @@ export async function createPatient(input: {
   email?: string;
 }) {
   const count = await prisma.patient.count();
-  const patientNo = `RSQ-P-${String(count + 1).padStart(6, '0')}`;
+  let patientNo = `RSQ-P-${String(count + 1).padStart(6, '0')}`;
+  while (await prisma.patient.findUnique({ where: { patientNo } })) {
+    patientNo = `RSQ-P-${String(Number(patientNo.slice(-6)) + 1).padStart(6, '0')}`;
+  }
   return prisma.patient.create({
     data: {
       patientNo,
@@ -40,6 +43,13 @@ export async function createPatient(input: {
 export async function getPatient(id: string) {
   return prisma.patient.findUnique({
     where: { id },
+    include: { cases: true, visits: true, invoices: true, payments: true, medications: { include: { medicine: true } } },
+  });
+}
+
+export async function getPatientByPatientNo(patientNo: string) {
+  return prisma.patient.findUnique({
+    where: { patientNo },
     include: { cases: true, visits: true, invoices: true, payments: true, medications: { include: { medicine: true } } },
   });
 }
