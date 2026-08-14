@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/**'
       - 'api/**'
+      - 'server.mjs'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig*.json'
@@ -29,6 +30,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Validate production server syntax
+        run: node --check server.mjs
 
       - name: Build application
         run: npm run build
