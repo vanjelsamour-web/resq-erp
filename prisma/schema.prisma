@@ -7,128 +7,99 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum PatientStatus {
-  ACTIVE
-  INACTIVE
-}
-
-enum CaseStatus {
-  PENDING
-  UNDER_REVIEW
-  APPROVED
-  REJECTED
-}
-
-enum VisitStatus {
-  SCHEDULED
-  COMPLETED
-  CANCELLED
-}
-
-enum InvoiceStatus {
-  DRAFT
-  ISSUED
-  PARTIALLY_PAID
-  PAID
-  OVERDUE
-}
-
-enum PaymentMethod {
-  BANK_TRANSFER
-  CARD
-  CASH
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  REFUNDED
-}
-
-enum MedicineStatus {
-  ACTIVE
-  INACTIVE
-}
+enum PatientStatus { ACTIVE INACTIVE }
+enum CaseStatus { PENDING UNDER_REVIEW APPROVED REJECTED }
+enum VisitStatus { SCHEDULED COMPLETED CANCELLED }
+enum InvoiceStatus { DRAFT ISSUED PARTIALLY_PAID PAID OVERDUE }
+enum PaymentMethod { BANK_TRANSFER CARD CASH }
+enum PaymentStatus { PENDING COMPLETED REFUNDED }
+enum MedicineStatus { ACTIVE INACTIVE }
+enum EmployeeRole { ADMIN MANAGER CASE_OFFICER FINANCE WAREHOUSE READ_ONLY }
+enum StockMovementType { RECEIPT ISSUE ADJUSTMENT RETURN WASTE }
+enum ExpenseCategory { SUPPLIES MEDICINE_LABOUR_SERVICES_RENT_UTILITIES_SOFTWARE_OTHER }
 
 model Patient {
-  id           String        @id @default(cuid())
-  patientNo    String        @unique @db.VarChar(20)
-  firstName    String        @db.VarChar(100)
-  lastName     String        @db.VarChar(100)
-  dateOfBirth  DateTime?
-  phone        String?       @db.VarChar(30)
-  email        String?       @db.VarChar(255)
-  status       PatientStatus @default(ACTIVE)
-  notes        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  cases        Case[]
-  visits       Visit[]
-  invoices     Invoice[]
-  payments     Payment[]
-  medications  PatientMedicine[]
-
+  id String @id @default(cuid())
+  patientNo String @unique @db.VarChar(20)
+  firstName String @db.VarChar(100)
+  lastName String @db.VarChar(100)
+  dateOfBirth DateTime?
+  phone String? @db.VarChar(30)
+  email String? @db.VarChar(255)
+  status PatientStatus @default(ACTIVE)
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cases Case[]
+  visits Visit[]
+  invoices Invoice[]
+  payments Payment[]
+  medications PatientMedicine[]
+  stockMovements StockMovement[]
+  expenses Expense[]
   @@index([lastName, firstName])
   @@index([phone])
   @@index([email])
 }
 
 model Case {
-  id             String     @id @default(cuid())
-  caseNo         String     @unique @db.VarChar(30)
-  patientId      String
-  type           String     @db.VarChar(80)
-  status         CaseStatus @default(PENDING)
-  amount         Decimal    @db.Decimal(12, 2)
-  decisionAmount Decimal?   @db.Decimal(12, 2)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  notes          String?
-  patient        Patient    @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  visits         Visit[]
-  invoices       Invoice[]
-
+  id String @id @default(cuid())
+  caseNo String @unique @db.VarChar(30)
+  patientId String
+  type String @db.VarChar(80)
+  status CaseStatus @default(PENDING)
+  amount Decimal @db.Decimal(12, 2)
+  decisionAmount Decimal? @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notes String?
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  visits Visit[]
+  invoices Invoice[]
+  stockMovements StockMovement[]
+  expenses Expense[]
   @@index([patientId])
   @@index([status])
   @@index([createdAt])
 }
 
 model Visit {
-  id            String      @id @default(cuid())
-  visitNo       String      @unique @db.VarChar(30)
-  patientId     String
-  caseId        String?
-  scheduledAt   DateTime
-  type          String      @db.VarChar(80)
-  practitioner  String?     @db.VarChar(150)
-  status        VisitStatus @default(SCHEDULED)
-  notes         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  case          Case?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
-
+  id String @id @default(cuid())
+  visitNo String @unique @db.VarChar(30)
+  patientId String
+  caseId String?
+  scheduledAt DateTime
+  type String @db.VarChar(80)
+  practitioner String? @db.VarChar(150)
+  status VisitStatus @default(SCHEDULED)
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
   @@index([patientId, scheduledAt])
   @@index([caseId])
   @@index([status])
 }
 
 model Invoice {
-  id           String        @id @default(cuid())
-  invoiceNo    String        @unique @db.VarChar(40)
-  patientId    String
-  caseId       String?
-  issueDate    DateTime      @default(now())
-  dueDate      DateTime
-  amount       Decimal       @db.Decimal(12, 2)
-  status       InvoiceStatus @default(ISSUED)
-  notes        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  case         Case?         @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  payments     Payment[]
-
+  id String @id @default(cuid())
+  invoiceNo String @unique @db.VarChar(40)
+  patientId String
+  caseId String?
+  issueDate DateTime @default(now())
+  dueDate DateTime
+  amount Decimal @db.Decimal(12, 2)
+  netAmount Decimal? @db.Decimal(12, 2)
+  vatRate Decimal? @db.Decimal(5, 2)
+  vatAmount Decimal? @db.Decimal(12, 2)
+  status InvoiceStatus @default(ISSUED)
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  payments Payment[]
   @@index([patientId])
   @@index([caseId])
   @@index([status])
@@ -136,21 +107,20 @@ model Invoice {
 }
 
 model Payment {
-  id          String        @id @default(cuid())
-  paymentNo   String        @unique @db.VarChar(40)
-  invoiceId   String
-  patientId   String
-  paidAt      DateTime      @default(now())
-  amount      Decimal       @db.Decimal(12, 2)
-  method      PaymentMethod
-  reference   String?       @db.VarChar(100)
-  status      PaymentStatus @default(COMPLETED)
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  invoice     Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Restrict)
-
+  id String @id @default(cuid())
+  paymentNo String @unique @db.VarChar(40)
+  invoiceId String
+  patientId String
+  paidAt DateTime @default(now())
+  amount Decimal @db.Decimal(12, 2)
+  method PaymentMethod
+  reference String? @db.VarChar(100)
+  status PaymentStatus @default(COMPLETED)
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
   @@index([invoiceId])
   @@index([patientId])
   @@index([paidAt])
@@ -158,32 +128,161 @@ model Payment {
 }
 
 model Medicine {
-  id          String        @id @default(cuid())
-  name        String        @db.VarChar(200)
-  strength    String?       @db.VarChar(100)
-  form        String?       @db.VarChar(100)
-  status      MedicineStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  patients    PatientMedicine[]
-
+  id String @id @default(cuid())
+  name String @db.VarChar(200)
+  strength String? @db.VarChar(100)
+  form String? @db.VarChar(100)
+  status MedicineStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patients PatientMedicine[]
+  inventoryItems InventoryItem[]
   @@index([name])
   @@index([status])
 }
 
 model PatientMedicine {
-  id          String    @id @default(cuid())
-  patientId   String
-  medicineId  String
+  id String @id @default(cuid())
+  patientId String
+  medicineId String
   prescribedAt DateTime @default(now())
-  quantity    String?   @db.VarChar(100)
-  dosage      String?   @db.VarChar(200)
+  quantity String? @db.VarChar(100)
+  dosage String? @db.VarChar(200)
   instructions String?
-  createdAt   DateTime  @default(now())
-  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  medicine    Medicine  @relation(fields: [medicineId], references: [id], onDelete: Restrict)
-
+  createdAt DateTime @default(now())
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict)
   @@index([patientId])
   @@index([medicineId])
   @@index([prescribedAt])
+}
+
+model Employee {
+  id String @id @default(cuid())
+  employeeNo String @unique @db.VarChar(30)
+  name String @db.VarChar(150)
+  email String? @db.VarChar(255)
+  role EmployeeRole @default(READ_ONLY)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  stockMovements StockMovement[]
+  expenses Expense[]
+  auditLogs AuditLog[]
+  @@index([role])
+  @@index([active])
+}
+
+model Supplier {
+  id String @id @default(cuid())
+  name String @db.VarChar(200)
+  vatNo String? @db.VarChar(50)
+  phone String? @db.VarChar(50)
+  email String? @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  invoices SupplierInvoice[]
+  @@index([name])
+}
+
+model InventoryItem {
+  id String @id @default(cuid())
+  code String @unique @db.VarChar(50)
+  name String @db.VarChar(200)
+  category String @db.VarChar(80)
+  unit String @db.VarChar(30)
+  stockQty Decimal @default(0) @db.Decimal(12, 3)
+  minStock Decimal @default(0) @db.Decimal(12, 3)
+  unitCost Decimal @default(0) @db.Decimal(12, 2)
+  billablePrice Decimal @default(0) @db.Decimal(12, 2)
+  expiryDate DateTime?
+  batchNo String? @db.VarChar(100)
+  medicineId String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  medicine Medicine? @relation(fields: [medicineId], references: [id], onDelete: SetNull)
+  movements StockMovement[]
+  @@index([category])
+  @@index([medicineId])
+  @@index([expiryDate])
+}
+
+model StockMovement {
+  id String @id @default(cuid())
+  movementNo String @unique @db.VarChar(40)
+  itemId String
+  employeeId String?
+  patientId String?
+  caseId String?
+  type StockMovementType
+  quantity Decimal @db.Decimal(12, 3)
+  unitCost Decimal @db.Decimal(12, 2)
+  billablePrice Decimal @db.Decimal(12, 2)
+  chargedAmount Decimal @db.Decimal(12, 2)
+  reason String?
+  createdAt DateTime @default(now())
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  @@index([itemId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([patientId])
+  @@index([caseId])
+}
+
+model SupplierInvoice {
+  id String @id @default(cuid())
+  invoiceNo String @unique @db.VarChar(50)
+  supplierId String
+  issueDate DateTime @default(now())
+  netAmount Decimal @db.Decimal(12, 2)
+  vatRate Decimal @db.Decimal(5, 2)
+  vatAmount Decimal @db.Decimal(12, 2)
+  totalAmount Decimal @db.Decimal(12, 2)
+  imagePath String?
+  ocrText String?
+  confirmed Boolean @default(false)
+  createdAt DateTime @default(now())
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  expenses Expense[]
+  @@index([supplierId])
+  @@index([issueDate])
+}
+
+model Expense {
+  id String @id @default(cuid())
+  expenseNo String @unique @db.VarChar(40)
+  category ExpenseCategory
+  description String @db.VarChar(255)
+  netAmount Decimal @db.Decimal(12, 2)
+  vatRate Decimal @db.Decimal(5, 2)
+  vatAmount Decimal @db.Decimal(12, 2)
+  totalAmount Decimal @db.Decimal(12, 2)
+  supplierInvoiceId String?
+  caseId String?
+  patientId String?
+  employeeId String?
+  createdAt DateTime @default(now())
+  supplierInvoice SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id], onDelete: SetNull)
+  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  @@index([category])
+  @@index([caseId])
+  @@index([supplierInvoiceId])
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+  employeeId String?
+  action String @db.VarChar(100)
+  entity String @db.VarChar(100)
+  entityId String? @db.VarChar(100)
+  details String?
+  createdAt DateTime @default(now())
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  @@index([createdAt])
+  @@index([entity, entityId])
 }
