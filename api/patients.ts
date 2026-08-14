@@ -1,4 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createPatient, getPatient, listPatients } from '../src/server/patients';
 
 function toUiPatient(patient: any) {
@@ -18,11 +17,11 @@ function toUiPatient(patient: any) {
   };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
-      const search = typeof req.query.search === 'string' ? req.query.search : '';
-      const id = typeof req.query.id === 'string' ? req.query.id : '';
+      const search = typeof req.query?.search === 'string' ? req.query.search : '';
+      const id = typeof req.query?.id === 'string' ? req.query.id : '';
       if (id) {
         const patient = await getPatient(id);
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
