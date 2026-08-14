@@ -8,7 +8,9 @@ import { installPdf } from './pdf-enhancements.mjs';
 import { installAuth } from './auth-enhancements.mjs';
 
 function moveAuthRoutesFirst(app) {
-  const router = app._router;
+  // Express 5 exposes the router as `app.router`; Express 4 used `_router`.
+  // Support both so auth endpoints are always evaluated before the SPA fallback.
+  const router = app.router || app._router;
   if (!router?.stack) return;
   const auth = router.stack.filter(layer => layer.route?.path?.startsWith('/api/auth'));
   if (!auth.length) return;
