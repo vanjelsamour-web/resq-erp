@@ -1,0 +1,9 @@
+import React from 'react';
+import { Activity,Bell,CalendarDays,CreditCard,FileText,LayoutDashboard,Menu,Pill,Settings,Users,X } from 'lucide-react';
+
+const navigation=[['Dashboard',LayoutDashboard],['Patients',Users],['Cases',FileText],['Visits',CalendarDays],['Invoices',CreditCard],['Payments',Activity],['Medicines',Pill]] as const;
+
+type Props={active:string;onNavigate:(module:string)=>void;sidebarOpen:boolean;setSidebarOpen:(open:boolean)=>void;children:React.ReactNode};
+export default function AppShell({active,onNavigate,sidebarOpen,setSidebarOpen,children}:Props){
+ return <div className="shell"><aside className={`sidebar ${sidebarOpen?'open':''}`}><div className="brand"><div className="brand-mark">R</div><div><strong>RESQ</strong><span>ERP</span></div><button className="close-mobile" onClick={()=>setSidebarOpen(false)}><X size={20}/></button></div><div className="nav-label">WORKSPACE</div><nav>{navigation.map(([label,Icon])=><button key={label} className={active===label?'nav-item active':'nav-item'} onClick={()=>onNavigate(label)}><Icon size={18}/><span>{label}</span></button>)}</nav><div className="sidebar-bottom"><button className="nav-item"><Settings size={18}/><span>Settings</span></button><div className="user-card"><div className="avatar">VS</div><div><strong>RESQ Admin</strong><small>Administrator</small></div></div></div></aside>{sidebarOpen&&<button className="overlay" onClick={()=>setSidebarOpen(false)}/>}<section className="main-area"><header className="topbar"><button className="mobile-menu" onClick={()=>setSidebarOpen(true)}><Menu size={22}/></button><div className="search"><span>⌕</span><input placeholder="Search patients, cases, invoices..."/></div><button className="icon-button"><Bell size={19}/><i/></button><div className="top-avatar">VS</div></header><main className="content">{children}</main></section></div>;
+}
