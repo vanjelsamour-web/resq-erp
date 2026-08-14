@@ -1,0 +1,27 @@
+import React, { useMemo, useState } from 'react';
+import { Plus, Search, X, Receipt, CreditCard } from 'lucide-react';
+
+type InvoiceStatus = 'Draft' | 'Issued' | 'Paid' | 'Partially paid' | 'Overdue';
+type Invoice = { id:string; patientId:string; patientName:string; caseId:string; date:string; dueDate:string; amount:number; paid:number; status:InvoiceStatus };
+
+const initialInvoices:Invoice[]=[
+ {id:'INV-2026-0014',patientId:'RSQ-P-000248',patientName:'Maria Georgiou',caseId:'#RSQ-1048',date:'14 Aug 2026',dueDate:'28 Aug 2026',amount:180,paid:0,status:'Issued'},
+ {id:'INV-2026-0013',patientId:'RSQ-P-000247',patientName:'Andreas Nicolaou',caseId:'#RSQ-1047',date:'13 Aug 2026',dueDate:'27 Aug 2026',amount:95,paid:95,status:'Paid'},
+ {id:'INV-2026-0012',patientId:'RSQ-P-000246',patientName:'Eleni Christou',caseId:'#RSQ-1046',date:'12 Aug 2026',dueDate:'26 Aug 2026',amount:420,paid:200,status:'Partially paid'},
+ {id:'INV-2026-0011',patientId:'RSQ-P-000245',patientName:'Petros Ioannou',caseId:'#RSQ-1045',date:'01 Jul 2026',dueDate:'15 Jul 2026',amount:75,paid:0,status:'Overdue'}
+];
+const badge=(s:InvoiceStatus)=>s==='Paid'?'approved':s==='Overdue'?'rejected':s==='Draft'?'review':s==='Partially paid'?'pending':'review';
+
+export default function Invoices(){
+ const [invoices,setInvoices]=useState(initialInvoices); const [search,setSearch]=useState(''); const [filter,setFilter]=useState('All'); const [show,setShow]=useState(false);
+ const [form,setForm]=useState({patientId:'RSQ-P-000248',patientName:'Maria Georgiou',caseId:'#RSQ-1048',amount:''});
+ const filtered=useMemo(()=>{const q=search.toLowerCase();return invoices.filter(i=>(filter==='All'||i.status===filter)&&(!q||`${i.id} ${i.patientName} ${i.patientId} ${i.caseId}`.toLowerCase().includes(q)))},[search,filter,invoices]);
+ const outstanding=invoices.reduce((s,i)=>s+i.amount-i.paid,0); const total=invoices.reduce((s,i)=>s+i.amount,0); const paid=invoices.reduce((s,i)=>s+i.paid,0);
+ const create=(e:React.FormEvent)=>{e.preventDefault();if(!form.amount)return;const n=invoices.length+1;const inv:Invoice={id:`INV-2026-${String(14+n).padStart(4,'0')}`,...form,date:'14 Aug 2026',dueDate:'28 Aug 2026',amount:Number(form.amount),paid:0,status:'Issued'};setInvoices([inv,...invoices]);setShow(false);setForm({...form,amount:''});};
+ const markPaid=(id:string)=>setInvoices(invoices.map(i=>i.id===id?{...i,paid:i.amount,status:'Paid'}:i));
+ return <><div className="page-heading"><div><p className="eyebrow">FINANCIAL MANAGEMENT</p><h1>Invoices</h1><p className="muted">Create invoices, track balances and record payments.</p></div><button className="primary" onClick={()=>setShow(true)}><Plus size={17}/> New invoice</button></div>
+ <div className="case-summary"><div><span>Total invoiced</span><strong>€{total.toLocaleString()}</strong></div><div><span>Paid</span><strong>€{paid.toLocaleString()}</strong></div><div><span>Outstanding</span><strong>€{outstanding.toLocaleString()}</strong></div><div><span>Invoices</span><strong>{invoices.length}</strong></div></div>
+ <div className="patient-toolbar"><div className="patient-search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search invoice, patient, case..."/></div><select className="filter-select" value={filter} onChange={e=>setFilter(e.target.value)}><option>All</option><option>Draft</option><option>Issued</option><option>Paid</option><option>Partially paid</option><option>Overdue</option></select></div>
+ <section className="panel"><div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Patient</th><th>Case</th><th>Issue date</th><th>Due date</th><th>Amount</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.map(i=><tr key={i.id}><td><strong>{i.id}</strong></td><td><strong>{i.patientName}</strong><small className="cell-sub">{i.patientId}</small></td><td>{i.caseId}</td><td>{i.date}</td><td>{i.dueDate}</td><td>€{i.amount.toLocaleString()}</td><td>€{(i.amount-i.paid).toLocaleString()}</td><td><b className={`badge ${badge(i.status)}`}>{i.status}</b></td><td>{i.status!=='Paid'&&<button className="link-button" onClick={()=>markPaid(i.id)}><CreditCard size={14}/> Mark paid</button>}</td></tr>)}{!filtered.length&&<tr><td colSpan={9} className="no-results">No invoices found.</td></tr>}</tbody></table></div></section>
+ {show&&<div className="modal-backdrop" onMouseDown={()=>setShow(false)}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">INVOICE REGISTRATION</p><h2>New invoice</h2></div><button className="modal-close" onClick={()=>setShow(false)}><X size={20}/></button></div><form onSubmit={create}><div className="form-grid"><label>Patient<input required value={form.patientName} onChange={e=>setForm({...form,patientName:e.target.value})}/><small>{form.patientId}</small></label><label>Case ID<input required value={form.caseId} onChange={e=>setForm({...form,caseId:e.target.value})}/></label><label>Amount (€)<input required type="number" min="0" step="0.01" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></label><label>Payment terms<select><option>14 days</option><option>30 days</option><option>60 days</option></select></label></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Cancel</button><button className="primary"><Receipt size={16}/> Create invoice</button></div></form></div></div>}</>;
+}
