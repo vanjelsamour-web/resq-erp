@@ -5,6 +5,7 @@ import { installPatientImport } from './patient-import-enhancements.mjs';
 import { installEmployeeEnhancements } from './employee-enhancements.mjs';
 import { installOcr } from './ocr-enhancements.mjs';
 import { installPdf } from './pdf-enhancements.mjs';
+import { installAuth } from './auth-enhancements.mjs';
 
 const originalListen = express.application.listen;
 if (!express.application.__resqListenPatched) {
@@ -16,6 +17,7 @@ if (!express.application.__resqListenPatched) {
     installEmployeeEnhancements(this);
     installOcr(this);
     installPdf(this);
+    installAuth(this);
     return originalListen.apply(this, args);
   };
 }
