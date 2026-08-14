@@ -11,6 +11,7 @@ RUN npx prisma generate
 COPY tsconfig.json vite.config.* index.html ./
 COPY src ./src
 COPY server.mjs ./server.mjs
+COPY server-preload.mjs server-enhancements.mjs ./
 
 RUN npm run build
 
@@ -27,8 +28,8 @@ COPY prisma ./prisma
 RUN npx prisma generate
 
 COPY --from=build /app/dist ./dist
-COPY server.mjs ./server.mjs
+COPY server.mjs server-preload.mjs server-enhancements.mjs ./
 
 EXPOSE 3000
 
-CMD ["node", "server.mjs"]
+CMD ["node", "--import", "./server-preload.mjs", "server.mjs"]
