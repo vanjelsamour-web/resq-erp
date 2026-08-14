@@ -21,8 +21,30 @@ function toUiCase(record) {
   return { id: record.caseNo, patientId: record.patient.patientNo, patientName: `${record.patient.firstName} ${record.patient.lastName}`.trim(), type: record.type, created: new Date(record.createdAt).toISOString().slice(0, 10), amount: Number(record.amount), status: statusMap[record.status] ?? 'Pending', notes: record.notes ?? 'No notes added.', databaseId: record.id, decisionAmount: record.decisionAmount == null ? null : Number(record.decisionAmount) };
 }
 
+function toUiVisit(record) {
+  const statusMap = { SCHEDULED: 'Scheduled', COMPLETED: 'Completed', CANCELLED: 'Cancelled' };
+  const scheduled = new Date(record.scheduledAt);
+  return {
+    id: record.visitNo,
+    patientId: record.patient.patientNo,
+    patientName: `${record.patient.firstName} ${record.patient.lastName}`.trim(),
+    date: scheduled.toISOString().slice(0, 10),
+    time: scheduled.toISOString().slice(11, 16),
+    type: record.type,
+    practitioner: record.practitioner ?? 'Not assigned',
+    notes: record.notes ?? 'No notes added.',
+    outcome: statusMap[record.status] ?? 'Scheduled',
+    databaseId: record.id,
+    caseId: record.case?.caseNo ?? null,
+  };
+}
+
 function statusFromUi(status) {
   return { Pending: 'PENDING', 'Under review': 'UNDER_REVIEW', Approved: 'APPROVED', Rejected: 'REJECTED' }[status];
+}
+
+function visitStatusFromUi(status) {
+  return { Scheduled: 'SCHEDULED', Completed: 'COMPLETED', Cancelled: 'CANCELLED' }[status];
 }
 
 async function listPatients(search = '') {
@@ -54,6 +76,27 @@ async function createCase(input) {
   const patient = await prisma.patient.findUnique({ where: { patientNo: input.patientId } });
   if (!patient) throw new Error('Patient not found');
   return prisma.case.create({ data: { caseNo, patientId: patient.id, type: input.type, amount: Number(input.amount), notes: input.notes || null }, include: { patient: true } });
+}
+
+async function listVisits() {
+  return prisma.visit.findMany({ orderBy: { scheduledAt: 'desc' }, include: { patient: true, case: true } });
+}
+
+async function createVisit(input) {
+  const count = await prisma.visit.count();
+  let number = count + 1;
+  let visitNo = `RSQ-V-${String(number).padStart(6, '0')}`;
+  while (await prisma.visit.findUnique({ where: { visitNo } })) { number += 1; visitNo = `RSQ-V-${String(number).padStart(6, '0')}`; }
+  const patient = await prisma.patient.findUnique({ where: { patientNo: input.patientId } });
+  if (!patient) throw new Error('Patient not found');
+  let caseId;
+  if (input.caseId) {
+    const record = await prisma.case.findUnique({ where: { caseNo: input.caseId } });
+    if (!record) throw new Error('Case not found');
+    if (record.patientId !== patient.id) throw new Error('Case does not belong to selected patient');
+    caseId = record.id;
+  }
+  return prisma.visit.create({ data: { visitNo, patientId: patient.id, caseId, scheduledAt: new Date(input.scheduledAt), type: input.type, practitioner: input.practitioner || null, notes: input.notes || null }, include: { patient: true, case: true } });
 }
 
 app.get('/api/health', async (_req, res) => {
@@ -109,6 +152,32 @@ app.patch('/api/cases/:id/status', async (req, res) => {
     const updated = await prisma.case.update({ where: { id: record.id }, data: { status, ...(decisionAmount !== undefined ? { decisionAmount } : {}) }, include: { patient: true } });
     res.json(toUiCase(updated));
   } catch (error) { console.error('Cases status PATCH error', error); res.status(500).json({ error: 'Unable to update case status' }); }
+});
+
+app.get('/api/visits', async (_req, res) => {
+  try { res.json((await listVisits()).map(toUiVisit)); }
+  catch (error) { console.error('Visits GET error', error); res.status(500).json({ error: 'Unable to load visits' }); }
+});
+
+app.post('/api/visits', async (req, res) => {
+  try {
+    const patientId = String(req.body?.patientId ?? '').trim();
+    const type = String(req.body?.type ?? '').trim();
+    const scheduledAt = String(req.body?.scheduledAt ?? '').trim();
+    if (!patientId || !type || !scheduledAt || Number.isNaN(new Date(scheduledAt).getTime())) return res.status(400).json({ error: 'Patient, visit type and a valid date/time are required' });
+    res.status(201).json(toUiVisit(await createVisit({ patientId, caseId: req.body?.caseId ? String(req.body.caseId).trim() : '', scheduledAt, type, practitioner: String(req.body?.practitioner ?? '').trim(), notes: String(req.body?.notes ?? '').trim() })));
+  } catch (error) { console.error('Visits POST error', error); res.status(error instanceof Error && (error.message === 'Patient not found' || error.message === 'Case not found') ? 404 : 400).json({ error: error instanceof Error ? error.message : 'Unable to create visit' }); }
+});
+
+app.patch('/api/visits/:id/status', async (req, res) => {
+  try {
+    const status = visitStatusFromUi(String(req.body?.status ?? ''));
+    if (!status) return res.status(400).json({ error: 'Invalid visit status' });
+    const record = await prisma.visit.findUnique({ where: { visitNo: req.params.id }, include: { patient: true, case: true } });
+    if (!record) return res.status(404).json({ error: 'Visit not found' });
+    const updated = await prisma.visit.update({ where: { id: record.id }, data: { status }, include: { patient: true, case: true } });
+    res.json(toUiVisit(updated));
+  } catch (error) { console.error('Visits status PATCH error', error); res.status(500).json({ error: 'Unable to update visit status' }); }
 });
 
 const distPath = path.join(__dirname, 'dist');
