@@ -1,6 +1,7 @@
 import express from 'express';
 import { installEnhancements } from './server-enhancements.mjs';
 import { installInvoiceCreate } from './invoice-create-enhancements.mjs';
+import { installPatientImport } from './patient-import-enhancements.mjs';
 
 const originalListen = express.application.listen;
 if (!express.application.__resqListenPatched) {
@@ -8,6 +9,7 @@ if (!express.application.__resqListenPatched) {
   express.application.listen = function (...args) {
     installEnhancements(this);
     installInvoiceCreate(this);
+    installPatientImport(this);
     return originalListen.apply(this, args);
   };
 }
