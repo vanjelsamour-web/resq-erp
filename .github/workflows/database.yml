@@ -31,8 +31,5 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Validate database connection
-        run: printf 'SELECT 1;\n' | npx prisma db execute --stdin
-
       - name: Apply Prisma schema
         run: npx prisma db push --accept-data-loss=false
