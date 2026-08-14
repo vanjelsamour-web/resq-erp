@@ -12,10 +12,10 @@
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
-    "@prisma/client": "latest",
+    "@prisma/client": "6.19.0",
     "@vitejs/plugin-react": "latest",
     "lucide-react": "latest",
-    "prisma": "latest",
+    "prisma": "6.19.0",
     "react": "latest",
     "react-dom": "latest",
     "typescript": "latest",
