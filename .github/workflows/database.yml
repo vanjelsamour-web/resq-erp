@@ -28,15 +28,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Generate Prisma client
         run: npx prisma generate
 
       - name: Validate database connection
-        run: npx prisma db execute --stdin <<'SQL'
-          SELECT 1;
-        SQL
+        run: printf 'SELECT 1;\n' | npx prisma db execute --stdin
 
       - name: Apply Prisma schema
         run: npx prisma db push --accept-data-loss=false
