@@ -69,7 +69,8 @@ enum StockMovementType {
 
 enum ExpenseCategory {
   SUPPLIES
-  MEDICINE_LABOUR
+  MEDICINE
+  LABOUR
   SERVICES
   RENT
   UTILITIES
