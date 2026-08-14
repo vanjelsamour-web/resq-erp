@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "node server.mjs",
     "preview": "vite preview",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -14,6 +15,7 @@
   "dependencies": {
     "@prisma/client": "6.19.0",
     "@vitejs/plugin-react": "latest",
+    "express": "^5.1.0",
     "lucide-react": "latest",
     "prisma": "6.19.0",
     "react": "latest",
@@ -22,8 +24,8 @@
     "vite": "latest"
   },
   "devDependencies": {
-  "@types/node": "latest",
-  "@types/react": "latest",
-  "@types/react-dom": "latest"
-}
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
 }
