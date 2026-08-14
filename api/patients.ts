@@ -1,4 +1,4 @@
-import { createPatient, getPatient, listPatients } from '../src/server/patients';
+import { createPatient, getPatientByPatientNo, listPatients } from '../src/server/patients';
 
 function toUiPatient(patient: any) {
   const lastVisit = patient.visits?.length
@@ -21,9 +21,9 @@ export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
       const search = typeof req.query?.search === 'string' ? req.query.search : '';
-      const id = typeof req.query?.id === 'string' ? req.query.id : '';
-      if (id) {
-        const patient = await getPatient(id);
+      const patientNo = typeof req.query?.id === 'string' ? req.query.id : '';
+      if (patientNo) {
+        const patient = await getPatientByPatientNo(patientNo);
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
         return res.status(200).json({ ...toUiPatient(patient), history: {
           cases: patient.cases,
