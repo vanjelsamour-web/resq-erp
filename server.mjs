@@ -3,218 +3,64 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const app = express();
-const prisma = new PrismaClient();
-const port = Number(process.env.PORT || 3000);
+const __filename=fileURLToPath(import.meta.url); const __dirname=path.dirname(__filename);
+const app=express(); const prisma=new PrismaClient(); const port=Number(process.env.PORT||3000);
+app.use(express.json({limit:'5mb'}));
 
-app.use(express.json({ limit: '1mb' }));
+const uiStatus={PENDING:'Pending',UNDER_REVIEW:'Under review',APPROVED:'Approved',REJECTED:'Rejected'};
+const visitUi={SCHEDULED:'Scheduled',COMPLETED:'Completed',CANCELLED:'Cancelled'};
+const invoiceUi={DRAFT:'Draft',ISSUED:'Issued',PARTIALLY_PAID:'Partially paid',PAID:'Paid',OVERDUE:'Overdue'};
+const paymentMethods={'Bank transfer':'BANK_TRANSFER',Card:'CARD',Cash:'CASH'};
+const roles={ADMIN:'Admin',MANAGER:'Manager',CASE_OFFICER:'Case Officer',FINANCE:'Finance',WAREHOUSE:'Warehouse',READ_ONLY:'Read only'};
+const movementUi={RECEIPT:'Receipt',ISSUE:'Issue',ADJUSTMENT:'Adjustment',RETURN:'Return',WASTE:'Waste'};
+const expenseUi={SUPPLIES:'Supplies',MEDICINE:'Medicine',LABOUR:'Labour',SERVICES:'Services',RENT:'Rent',UTILITIES:'Utilities',SOFTWARE:'Software',OTHER:'Other'};
 
-function toUiPatient(patient) {
-  const lastVisit = patient.visits?.length ? [...patient.visits].sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt))[0] : null;
-  return { id: patient.patientNo, name: `${patient.firstName} ${patient.lastName}`.trim(), dob: patient.dateOfBirth ? new Date(patient.dateOfBirth).toISOString().slice(0, 10) : '', phone: patient.phone ?? '', email: patient.email ?? '', status: patient.status === 'ACTIVE' ? 'Active' : 'Inactive', lastVisit: lastVisit ? new Date(lastVisit.scheduledAt).toISOString().slice(0, 10) : '—', databaseId: patient.id };
-}
+function patientName(p){return `${p.firstName} ${p.lastName}`.trim()}
+function toUiPatient(p){const v=p.visits?.length?[...p.visits].sort((a,b)=>+new Date(b.scheduledAt)-+new Date(a.scheduledAt))[0]:null;return {id:p.patientNo,name:patientName(p),dob:p.dateOfBirth?new Date(p.dateOfBirth).toISOString().slice(0,10):'',phone:p.phone??'',email:p.email??'',status:p.status==='ACTIVE'?'Active':'Inactive',lastVisit:v?new Date(v.scheduledAt).toISOString().slice(0,10):'—',databaseId:p.id}}
+function toUiCase(r){return {id:r.caseNo,patientId:r.patient.patientNo,patientName:patientName(r.patient),type:r.type,created:new Date(r.createdAt).toISOString().slice(0,10),amount:Number(r.amount),status:uiStatus[r.status]??'Pending',notes:r.notes??'No notes added.',databaseId:r.id,decisionAmount:r.decisionAmount==null?null:Number(r.decisionAmount)}}
+function toUiVisit(r){const d=new Date(r.scheduledAt);return {id:r.visitNo,patientId:r.patient.patientNo,patientName:patientName(r.patient),date:d.toISOString().slice(0,10),time:d.toISOString().slice(11,16),type:r.type,practitioner:r.practitioner??'Not assigned',notes:r.notes??'No notes added.',outcome:visitUi[r.status]??'Scheduled',databaseId:r.id,caseId:r.case?.caseNo??null}}
+function toUiInvoice(r){const paid=(r.payments??[]).filter(p=>p.status==='COMPLETED').reduce((s,p)=>s+Number(p.amount),0);return {id:r.invoiceNo,patientId:r.patient.patientNo,patientName:patientName(r.patient),caseId:r.case?.caseNo??null,date:new Date(r.issueDate).toISOString().slice(0,10),dueDate:new Date(r.dueDate).toISOString().slice(0,10),amount:Number(r.amount),netAmount:r.netAmount==null?Number(r.amount):Number(r.netAmount),vatRate:r.vatRate==null?0:Number(r.vatRate),vatAmount:r.vatAmount==null?0:Number(r.vatAmount),paid,status:invoiceUi[r.status]??'Issued',databaseId:r.id}}
+function toUiEmployee(e){return {id:e.employeeNo,name:e.name,email:e.email??'',role:roles[e.role]??e.role,roleCode:e.role,active:e.active,databaseId:e.id}}
+function toUiItem(i){return {id:i.code,name:i.name,category:i.category,unit:i.unit,stock:Number(i.stockQty),minStock:Number(i.minStock),unitCost:Number(i.unitCost),billablePrice:Number(i.billablePrice),expiryDate:i.expiryDate?new Date(i.expiryDate).toISOString().slice(0,10):'',batchNo:i.batchNo??'',medicineId:i.medicineId??null,active:i.active,databaseId:i.id}}
+function toUiMovement(m){return {id:m.movementNo,itemId:m.item.code,itemName:m.item.name,employeeId:m.employee?.employeeNo??null,employeeName:m.employee?.name??'—',patientId:m.patient?.patientNo??null,patientName:m.patient?patientName(m.patient):null,caseId:m.case?.caseNo??null,type:movementUi[m.type]??m.type,quantity:Number(m.quantity),unitCost:Number(m.unitCost),billablePrice:Number(m.billablePrice),chargedAmount:Number(m.chargedAmount),reason:m.reason??'',date:new Date(m.createdAt).toISOString()}}
+function toUiMedicine(m){return {id:m.id,name:m.name,strength:m.strength??'',form:m.form??'',status:m.status==='ACTIVE'?'Active':'Inactive'}}
+async function nextNumber(model,prefix,field,pad=6){let n=(await model.count())+1;let v=`${prefix}-${String(n).padStart(pad,'0')}`;while(await model.findUnique({where:{[field]:v}})){n++;v=`${prefix}-${String(n).padStart(pad,'0')}`}return v}
+async function audit(action,entity,entityId,details,employeeId=null){try{await prisma.auditLog.create({data:{action,entity,entityId,details,employeeId}})}catch(e){console.error('Audit log error',e)}}
 
-function toUiCase(record) {
-  const statusMap = { PENDING: 'Pending', UNDER_REVIEW: 'Under review', APPROVED: 'Approved', REJECTED: 'Rejected' };
-  return { id: record.caseNo, patientId: record.patient.patientNo, patientName: `${record.patient.firstName} ${record.patient.lastName}`.trim(), type: record.type, created: new Date(record.createdAt).toISOString().slice(0, 10), amount: Number(record.amount), status: statusMap[record.status] ?? 'Pending', notes: record.notes ?? 'No notes added.', databaseId: record.id, decisionAmount: record.decisionAmount == null ? null : Number(record.decisionAmount) };
-}
+app.get('/api/health',async(_q,res)=>{try{await prisma.$queryRaw`SELECT 1`;res.json({ok:true,database:'connected'})}catch{res.status(503).json({ok:false,database:'unavailable'})}});
 
-function toUiVisit(record) {
-  const statusMap = { SCHEDULED: 'Scheduled', COMPLETED: 'Completed', CANCELLED: 'Cancelled' };
-  const scheduled = new Date(record.scheduledAt);
-  return { id: record.visitNo, patientId: record.patient.patientNo, patientName: `${record.patient.firstName} ${record.patient.lastName}`.trim(), date: scheduled.toISOString().slice(0, 10), time: scheduled.toISOString().slice(11, 16), type: record.type, practitioner: record.practitioner ?? 'Not assigned', notes: record.notes ?? 'No notes added.', outcome: statusMap[record.status] ?? 'Scheduled', databaseId: record.id, caseId: record.case?.caseNo ?? null };
-}
+app.get('/api/patients',async(req,res)=>{try{const id=typeof req.query.id==='string'?req.query.id:'';if(id){const p=await prisma.patient.findUnique({where:{patientNo:id},include:{cases:true,visits:true,invoices:true,payments:true,medications:{include:{medicine:true}}}});if(!p)return res.status(404).json({error:'Patient not found'});return res.json({...toUiPatient(p),history:{cases:p.cases,visits:p.visits,invoices:p.invoices,payments:p.payments,medications:p.medications}})}const s=typeof req.query.search==='string'?req.query.search:'';const p=await prisma.patient.findMany({where:s?{OR:[{patientNo:{contains:s,mode:'insensitive'}},{firstName:{contains:s,mode:'insensitive'}},{lastName:{contains:s,mode:'insensitive'}},{phone:{contains:s,mode:'insensitive'}},{email:{contains:s,mode:'insensitive'}}]}:undefined,orderBy:{createdAt:'desc'},include:{visits:true}});res.json(p.map(toUiPatient))}catch(e){console.error(e);res.status(500).json({error:'Unable to load patients'})}});
+app.post('/api/patients',async(req,res)=>{try{const name=String(req.body?.name??'').trim();if(!name)return res.status(400).json({error:'Full name is required'});const parts=name.split(/\s+/);const count=await prisma.patient.count();let n=count+1;let patientNo=`RSQ-P-${String(n).padStart(6,'0')}`;while(await prisma.patient.findUnique({where:{patientNo}})){n++;patientNo=`RSQ-P-${String(n).padStart(6,'0')}`}const p=await prisma.patient.create({data:{patientNo,firstName:parts.shift()??'',lastName:parts.join(' ')||name,dateOfBirth:req.body?.dob?new Date(req.body.dob):undefined,phone:req.body?.phone||undefined,email:req.body?.email||undefined},include:{visits:true}});res.status(201).json(toUiPatient(p))}catch(e){console.error(e);res.status(500).json({error:'Unable to create patient'})}});
 
-function toUiInvoice(record) {
-  const statusMap = { DRAFT: 'Draft', ISSUED: 'Issued', PARTIALLY_PAID: 'Partially paid', PAID: 'Paid', OVERDUE: 'Overdue' };
-  const paid = (record.payments ?? []).filter(p => p.status === 'COMPLETED').reduce((sum, p) => sum + Number(p.amount), 0);
-  return { id: record.invoiceNo, patientId: record.patient.patientNo, patientName: `${record.patient.firstName} ${record.patient.lastName}`.trim(), caseId: record.case?.caseNo ?? null, date: new Date(record.issueDate).toISOString().slice(0, 10), dueDate: new Date(record.dueDate).toISOString().slice(0, 10), amount: Number(record.amount), paid, status: statusMap[record.status] ?? 'Issued', databaseId: record.id };
-}
+app.get('/api/cases',async(req,res)=>{try{const patientNo=typeof req.query.patientId==='string'?req.query.patientId:'';const rows=await prisma.case.findMany({where:patientNo?{patient:{patientNo}}:undefined,orderBy:{createdAt:'desc'},include:{patient:true}});res.json(rows.map(toUiCase))}catch(e){console.error(e);res.status(500).json({error:'Unable to load cases'})}});
+app.post('/api/cases',async(req,res)=>{try{const patientNo=String(req.body?.patientId??'').trim(),type=String(req.body?.type??'').trim(),amount=Number(req.body?.amount);if(!patientNo||!type||!Number.isFinite(amount)||amount<0)return res.status(400).json({error:'Patient, case type and valid amount are required'});const p=await prisma.patient.findUnique({where:{patientNo}});if(!p)return res.status(404).json({error:'Patient not found'});const no=await nextNumber(prisma.case,'RSQ-C','caseNo',6);const r=await prisma.case.create({data:{caseNo:no,patientId:p.id,type,amount,notes:String(req.body?.notes??'')||null},include:{patient:true}});res.status(201).json(toUiCase(r))}catch(e){console.error(e);res.status(500).json({error:'Unable to create case'})}});
+app.patch('/api/cases/:id/status',async(req,res)=>{try{const map={Pending:'PENDING','Under review':'UNDER_REVIEW',Approved:'APPROVED',Rejected:'REJECTED'},status=map[String(req.body?.status??'')];if(!status)return res.status(400).json({error:'Invalid case status'});const r=await prisma.case.findUnique({where:{caseNo:req.params.id}});if(!r)return res.status(404).json({error:'Case not found'});const u=await prisma.case.update({where:{id:r.id},data:{status,decisionAmount:status==='APPROVED'?Number(req.body?.decisionAmount??r.amount):r.decisionAmount},include:{patient:true}});res.json(toUiCase(u))}catch(e){res.status(500).json({error:'Unable to update case status'})}});
 
-function statusFromUi(status) { return { Pending: 'PENDING', 'Under review': 'UNDER_REVIEW', Approved: 'APPROVED', Rejected: 'REJECTED' }[status]; }
-function visitStatusFromUi(status) { return { Scheduled: 'SCHEDULED', Completed: 'COMPLETED', Cancelled: 'CANCELLED' }[status]; }
-function invoiceStatusFromUi(status) { return { Draft: 'DRAFT', Issued: 'ISSUED', 'Partially paid': 'PARTIALLY_PAID', Paid: 'PAID', Overdue: 'OVERDUE' }[status]; }
-function paymentMethodFromUi(method) { return { 'Bank transfer': 'BANK_TRANSFER', Card: 'CARD', Cash: 'CASH' }[method]; }
+app.get('/api/visits',async(_q,res)=>{try{const r=await prisma.visit.findMany({orderBy:{scheduledAt:'desc'},include:{patient:true,case:true}});res.json(r.map(toUiVisit))}catch(e){console.error(e);res.status(500).json({error:'Unable to load visits'})}});
+app.post('/api/visits',async(req,res)=>{try{const patientNo=String(req.body?.patientId??'').trim(),scheduledAt=String(req.body?.scheduledAt??''),type=String(req.body?.type??'').trim();if(!patientNo||!type||Number.isNaN(new Date(scheduledAt).getTime()))return res.status(400).json({error:'Patient, visit type and valid date/time are required'});const p=await prisma.patient.findUnique({where:{patientNo}});if(!p)return res.status(404).json({error:'Patient not found'});let caseId=null;if(req.body?.caseId){const c=await prisma.case.findUnique({where:{caseNo:String(req.body.caseId)}});if(!c||c.patientId!==p.id)return res.status(400).json({error:'Invalid case'});caseId=c.id}const no=await nextNumber(prisma.visit,'RSQ-V','visitNo',6);const r=await prisma.visit.create({data:{visitNo:no,patientId:p.id,caseId,scheduledAt:new Date(scheduledAt),type,practitioner:String(req.body?.practitioner??'')||null,notes:String(req.body?.notes??'')||null},include:{patient:true,case:true}});res.status(201).json(toUiVisit(r))}catch(e){console.error(e);res.status(500).json({error:'Unable to create visit'})}});
 
-async function listPatients(search = '') {
-  const q = search.trim();
-  return prisma.patient.findMany({ where: q ? { OR: [{ patientNo: { contains: q, mode: 'insensitive' } }, { firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }, { phone: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] } : undefined, orderBy: { createdAt: 'desc' }, include: { visits: true } });
-}
+app.get('/api/invoices',async(_q,res)=>{try{const r=await prisma.invoice.findMany({orderBy:{issueDate:'desc'},include:{patient:true,case:true,payments:true}});res.json(r.map(toUiInvoice))}catch(e){console.error(e);res.status(500).json({error:'Unable to load invoices'})}});
+app.post('/api/invoices',async(req,res)=>{try{const patientNo=String(req.body?.patientId??'').trim(),caseNo=String(req.body?.caseId??'').trim(),amount=Number(req.body?.amount),vatRate=Number(req.body?.vatRate??0),dueDate=new Date(String(req.body?.dueDate??''));if(!patientNo||!Number.isFinite(amount)||amount<0||Number.isNaN(dueDate.getTime()))return res.status(400).json({error:'Patient, valid amount and due date are required'});const p=await prisma.patient.findUnique({where:{patientNo}});if(!p)return res.status(404).json({error:'Patient not found'});let caseId=null;if(caseNo){const c=await prisma.case.findUnique({where:{caseNo}});if(!c||c.patientId!==p.id)return res.status(400).json({error:'Case does not belong to selected patient'});caseId=c.id}const vat=Number((amount*vatRate/100).toFixed(2)),net=Number((amount-vat).toFixed(2));const no=await nextNumber(prisma.invoice,`INV-${new Date().getFullYear()}`,'invoiceNo',6);const r=await prisma.invoice.create({data:{invoiceNo:no,patientId:p.id,caseId,dueDate,amount,netAmount:net,vatRate,vatAmount:vat,status:'ISSUED'},include:{patient:true,case:true,payments:true}});res.status(201).json(toUiInvoice(r))}catch(e){console.error(e);res.status(500).json({error:'Unable to create invoice'})}});
+app.post('/api/invoices/:id/payments',async(req,res)=>{try{const amount=Number(req.body?.amount),method=paymentMethods[String(req.body?.method??'')],reference=String(req.body?.reference??'').trim();if(!Number.isFinite(amount)||amount<=0||!method)return res.status(400).json({error:'Valid amount and payment method are required'});const inv=await prisma.invoice.findUnique({where:{invoiceNo:req.params.id},include:{payments:true,patient:true,case:true}});if(!inv)return res.status(404).json({error:'Invoice not found'});const paid=inv.payments.filter(p=>p.status==='COMPLETED').reduce((s,p)=>s+Number(p.amount),0),balance=Number(inv.amount)-paid;if(amount>balance+0.001)return res.status(400).json({error:`Payment exceeds outstanding balance of €${balance.toFixed(2)}`});const no=await nextNumber(prisma.payment,'PAY','paymentNo',6);await prisma.payment.create({data:{paymentNo:no,invoiceId:inv.id,patientId:inv.patientId,amount,method,reference:reference||null,status:'COMPLETED'}});const newPaid=paid+amount;const status=newPaid>=Number(inv.amount)?'PAID':'PARTIALLY_PAID';const u=await prisma.invoice.update({where:{id:inv.id},data:{status},include:{patient:true,case:true,payments:true}});res.status(201).json(toUiInvoice(u))}catch(e){console.error(e);res.status(500).json({error:'Unable to record payment'})}});
 
-async function getPatientByPatientNo(patientNo) {
-  return prisma.patient.findUnique({ where: { patientNo }, include: { cases: true, visits: true, invoices: true, payments: true, medications: { include: { medicine: true } } } });
-}
+app.get('/api/employees',async(_q,res)=>{try{res.json((await prisma.employee.findMany({orderBy:{name:'asc'}})).map(toUiEmployee))}catch(e){console.error(e);res.status(500).json({error:'Unable to load employees'})}});
+app.post('/api/employees',async(req,res)=>{try{const name=String(req.body?.name??'').trim(),role=String(req.body?.role??'READ_ONLY');if(!name||!roles[role])return res.status(400).json({error:'Name and valid role are required'});const no=await nextNumber(prisma.employee,'EMP','employeeNo',4);const e=await prisma.employee.create({data:{employeeNo:no,name,email:req.body?.email||null,role}});await audit('CREATE','Employee',e.employeeNo,`Role: ${role}`);res.status(201).json(toUiEmployee(e))}catch(e){console.error(e);res.status(500).json({error:'Unable to create employee'})}});
 
-async function createPatient(input) {
-  const count = await prisma.patient.count();
-  let number = count + 1;
-  let patientNo = `RSQ-P-${String(number).padStart(6, '0')}`;
-  while (await prisma.patient.findUnique({ where: { patientNo } })) { number += 1; patientNo = `RSQ-P-${String(number).padStart(6, '0')}`; }
-  return prisma.patient.create({ data: { patientNo, firstName: input.firstName, lastName: input.lastName, dateOfBirth: input.dateOfBirth, phone: input.phone, email: input.email }, include: { visits: true } });
-}
+app.get('/api/inventory',async(_q,res)=>{try{const r=await prisma.inventoryItem.findMany({orderBy:{name:'asc'}});res.json(r.map(toUiItem))}catch(e){console.error(e);res.status(500).json({error:'Unable to load inventory'})}});
+app.post('/api/inventory',async(req,res)=>{try{const code=String(req.body?.code??'').trim(),name=String(req.body?.name??'').trim(),category=String(req.body?.category??'').trim(),unit=String(req.body?.unit??'pcs').trim();if(!code||!name||!category)return res.status(400).json({error:'Code, name and category are required'});const i=await prisma.inventoryItem.create({data:{code,name,category,unit,stockQty:Number(req.body?.stock??0),minStock:Number(req.body?.minStock??0),unitCost:Number(req.body?.unitCost??0),billablePrice:Number(req.body?.billablePrice??0),expiryDate:req.body?.expiryDate?new Date(req.body.expiryDate):null,batchNo:req.body?.batchNo||null}});res.status(201).json(toUiItem(i))}catch(e){console.error(e);res.status(500).json({error:'Unable to create inventory item'})}});
+app.get('/api/inventory/movements',async(_q,res)=>{try{const r=await prisma.stockMovement.findMany({orderBy:{createdAt:'desc'},include:{item:true,employee:true,patient:true,case:true},take:500});res.json(r.map(toUiMovement))}catch(e){console.error(e);res.status(500).json({error:'Unable to load stock movements'})}});
+app.post('/api/inventory/:code/issue',async(req,res)=>{try{const qty=Number(req.body?.quantity),employeeNo=String(req.body?.employeeId??'').trim(),patientNo=String(req.body?.patientId??'').trim(),caseNo=String(req.body?.caseId??'').trim();if(!Number.isFinite(qty)||qty<=0||!employeeNo)return res.status(400).json({error:'Quantity and employee are required'});const item=await prisma.inventoryItem.findUnique({where:{code:req.params.code}});if(!item)return res.status(404).json({error:'Inventory item not found'});if(Number(item.stockQty)<qty)return res.status(400).json({error:`Insufficient stock. Available: ${item.stockQty}`});const e=await prisma.employee.findUnique({where:{employeeNo}});if(!e)return res.status(404).json({error:'Employee not found'});const p=patientNo?await prisma.patient.findUnique({where:{patientNo}}):null;const c=caseNo?await prisma.case.findUnique({where:{caseNo}}):null;if(patientNo&&!p)return res.status(404).json({error:'Patient not found'});if(caseNo&&(!c||!p||c.patientId!==p.id))return res.status(400).json({error:'Case does not belong to patient'});const charged=Number((qty*Number(item.billablePrice)).toFixed(2)),no=await nextNumber(prisma.stockMovement,'STK','movementNo',6);const m=await prisma.$transaction(async tx=>{const x=await tx.stockMovement.create({data:{movementNo:no,itemId:item.id,employeeId:e.id,patientId:p?.id??null,caseId:c?.id??null,type:'ISSUE',quantity:qty,unitCost:item.unitCost,billablePrice:item.billablePrice,chargedAmount:charged,reason:req.body?.reason||null},include:{item:true,employee:true,patient:true,case:true}});await tx.inventoryItem.update({where:{id:item.id},data:{stockQty:{decrement:qty}}});return x});await audit('ISSUE','Inventory',item.code,`${qty} ${item.unit} issued to ${e.name}; patient ${patientNo||'—'}; case ${caseNo||'—'}`,e.id);res.status(201).json(toUiMovement(m))}catch(e){console.error(e);res.status(500).json({error:e instanceof Error?e.message:'Unable to issue stock'})}});
+app.post('/api/inventory/:code/receipt',async(req,res)=>{try{const qty=Number(req.body?.quantity),cost=Number(req.body?.unitCost);if(!Number.isFinite(qty)||qty<=0||!Number.isFinite(cost)||cost<0)return res.status(400).json({error:'Quantity and valid unit cost are required'});const item=await prisma.inventoryItem.findUnique({where:{code:req.params.code}});if(!item)return res.status(404).json({error:'Inventory item not found'});const no=await nextNumber(prisma.stockMovement,'STK','movementNo',6);const m=await prisma.$transaction(async tx=>{const x=await tx.stockMovement.create({data:{movementNo:no,itemId:item.id,type:'RECEIPT',quantity:qty,unitCost:cost,billablePrice:item.billablePrice,chargedAmount:0,reason:req.body?.reason||null},include:{item:true,employee:true,patient:true,case:true}});await tx.inventoryItem.update({where:{id:item.id},data:{stockQty:{increment:qty},unitCost:cost}});return x});res.status(201).json(toUiMovement(m))}catch(e){console.error(e);res.status(500).json({error:'Unable to receive stock'})}});
 
-async function listCases(patientNo = '') {
-  return prisma.case.findMany({ where: patientNo ? { patient: { patientNo } } : undefined, orderBy: { createdAt: 'desc' }, include: { patient: true } });
-}
+app.get('/api/medicines',async(_q,res)=>{try{res.json((await prisma.medicine.findMany({orderBy:{name:'asc'}})).map(toUiMedicine))}catch(e){res.status(500).json({error:'Unable to load medicines'})}});
+app.post('/api/medicines',async(req,res)=>{try{const name=String(req.body?.name??'').trim();if(!name)return res.status(400).json({error:'Medicine name is required'});const m=await prisma.medicine.create({data:{name,strength:req.body?.strength||null,form:req.body?.form||null}});res.status(201).json(toUiMedicine(m))}catch(e){res.status(500).json({error:'Unable to create medicine'})}});
 
-async function createCase(input) {
-  const count = await prisma.case.count();
-  let number = count + 1;
-  let caseNo = `RSQ-C-${String(number).padStart(6, '0')}`;
-  while (await prisma.case.findUnique({ where: { caseNo } })) { number += 1; caseNo = `RSQ-C-${String(number).padStart(6, '0')}`; }
-  const patient = await prisma.patient.findUnique({ where: { patientNo: input.patientId } });
-  if (!patient) throw new Error('Patient not found');
-  return prisma.case.create({ data: { caseNo, patientId: patient.id, type: input.type, amount: Number(input.amount), notes: input.notes || null }, include: { patient: true } });
-}
+app.get('/api/reports/summary',async(_q,res)=>{try{const [invoices,payments,expenses,items,movements]=await Promise.all([prisma.invoice.findMany({include:{payments:true}}),prisma.payment.findMany({where:{status:'COMPLETED'}}),prisma.expense.findMany(),prisma.inventoryItem.findMany(),prisma.stockMovement.findMany({where:{type:'ISSUE'}})]);const revenue=invoices.reduce((s,i)=>s+(i.netAmount==null?Number(i.amount):Number(i.netAmount)),0),outputVat=invoices.reduce((s,i)=>s+(i.vatAmount==null?0:Number(i.vatAmount)),0),inputVat=expenses.reduce((s,e)=>s+Number(e.vatAmount),0),expenseTotal=expenses.reduce((s,e)=>s+Number(e.netAmount),0),stockCost=movements.reduce((s,m)=>s+Number(m.unitCost)*Number(m.quantity),0);res.json({revenue,outputVat,inputVat,vatPayable:outputVat-inputVat,expenses:expenseTotal+stockCost,grossProfit:revenue-expenseTotal-stockCost,profitMargin:revenue?((revenue-expenseTotal-stockCost)/revenue)*100:0,collections:payments.reduce((s,p)=>s+Number(p.amount),0),lowStock:items.filter(i=>Number(i.stockQty)<=Number(i.minStock)).length,inventoryValue:items.reduce((s,i)=>s+Number(i.stockQty)*Number(i.unitCost),0),invoiceCount:invoices.length})}catch(e){console.error(e);res.status(500).json({error:'Unable to load reports'})}});
+app.get('/api/reports/cases',async(_q,res)=>{try{const cases=await prisma.case.findMany({include:{patient:true,invoices:true,stockMovements:true,expenses:true},orderBy:{createdAt:'desc'}});res.json(cases.map(c=>{const revenue=c.invoices.reduce((s,i)=>s+(i.netAmount==null?Number(i.amount):Number(i.netAmount)),0),material=c.stockMovements.reduce((s,m)=>s+Number(m.unitCost)*Number(m.quantity),0),expenses=c.expenses.reduce((s,e)=>s+Number(e.netAmount),0),profit=revenue-material-expenses;return {id:c.caseNo,patient:patientName(c.patient),revenue,cost:material+expenses,profit,margin:revenue?profit/revenue*100:0}}))}catch(e){res.status(500).json({error:'Unable to load case profitability'})}});
+app.get('/api/audit',async(_q,res)=>{try{res.json(await prisma.auditLog.findMany({orderBy:{createdAt:'desc'},include:{employee:true},take:500}))}catch(e){res.status(500).json({error:'Unable to load audit log'})}});
 
-async function listVisits() { return prisma.visit.findMany({ orderBy: { scheduledAt: 'desc' }, include: { patient: true, case: true } }); }
+app.post('/api/invoices/ocr',async(req,res)=>{res.status(501).json({error:'OCR service is not configured yet. Upload processing is reserved for the OCR integration.'})});
 
-async function createVisit(input) {
-  const count = await prisma.visit.count();
-  let number = count + 1;
-  let visitNo = `RSQ-V-${String(number).padStart(6, '0')}`;
-  while (await prisma.visit.findUnique({ where: { visitNo } })) { number += 1; visitNo = `RSQ-V-${String(number).padStart(6, '0')}`; }
-  const patient = await prisma.patient.findUnique({ where: { patientNo: input.patientId } });
-  if (!patient) throw new Error('Patient not found');
-  let caseId;
-  if (input.caseId) {
-    const record = await prisma.case.findUnique({ where: { caseNo: input.caseId } });
-    if (!record) throw new Error('Case not found');
-    if (record.patientId !== patient.id) throw new Error('Case does not belong to selected patient');
-    caseId = record.id;
-  }
-  return prisma.visit.create({ data: { visitNo, patientId: patient.id, caseId, scheduledAt: new Date(input.scheduledAt), type: input.type, practitioner: input.practitioner || null, notes: input.notes || null }, include: { patient: true, case: true } });
-}
-
-async function nextNumber(model, prefix, field, pad = 6) {
-  const count = await model.count();
-  let number = count + 1;
-  let value = `${prefix}-${String(number).padStart(pad, '0')}`;
-  while (await model.findUnique({ where: { [field]: value } })) { number += 1; value = `${prefix}-${String(number).padStart(pad, '0')}`; }
-  return value;
-}
-
-app.get('/api/health', async (_req, res) => {
-  try { await prisma.$queryRaw`SELECT 1`; res.json({ ok: true, database: 'connected' }); }
-  catch (error) { console.error('Health check failed', error); res.status(503).json({ ok: false, database: 'unavailable' }); }
-});
-
-app.get('/api/patients', async (req, res) => {
-  try {
-    const patientNo = typeof req.query.id === 'string' ? req.query.id : '';
-    if (patientNo) {
-      const patient = await getPatientByPatientNo(patientNo);
-      if (!patient) return res.status(404).json({ error: 'Patient not found' });
-      return res.json({ ...toUiPatient(patient), history: { cases: patient.cases, visits: patient.visits, invoices: patient.invoices, payments: patient.payments, medications: patient.medications } });
-    }
-    const search = typeof req.query.search === 'string' ? req.query.search : '';
-    res.json((await listPatients(search)).map(toUiPatient));
-  } catch (error) { console.error('Patients GET error', error); res.status(500).json({ error: 'Unable to load patients' }); }
-});
-
-app.post('/api/patients', async (req, res) => {
-  try {
-    const name = String(req.body?.name ?? '').trim();
-    if (!name) return res.status(400).json({ error: 'Full name is required' });
-    const parts = name.split(/\s+/);
-    const patient = await createPatient({ firstName: parts.shift() ?? '', lastName: parts.join(' ') || name, dateOfBirth: req.body?.dob ? new Date(req.body.dob) : undefined, phone: req.body?.phone ? String(req.body.phone) : undefined, email: req.body?.email ? String(req.body.email) : undefined });
-    res.status(201).json(toUiPatient(patient));
-  } catch (error) { console.error('Patients POST error', error); res.status(500).json({ error: 'Unable to create patient' }); }
-});
-
-app.get('/api/cases', async (req, res) => {
-  try { const patientNo = typeof req.query.patientId === 'string' ? req.query.patientId : ''; res.json((await listCases(patientNo)).map(toUiCase)); }
-  catch (error) { console.error('Cases GET error', error); res.status(500).json({ error: 'Unable to load cases' }); }
-});
-
-app.post('/api/cases', async (req, res) => {
-  try {
-    const patientId = String(req.body?.patientId ?? '').trim(); const type = String(req.body?.type ?? '').trim(); const amount = Number(req.body?.amount);
-    if (!patientId || !type || !Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'Patient, case type and a valid amount are required' });
-    res.status(201).json(toUiCase(await createCase({ patientId, type, amount, notes: String(req.body?.notes ?? '').trim() })));
-  } catch (error) { console.error('Cases POST error', error); res.status(error instanceof Error && error.message === 'Patient not found' ? 404 : 500).json({ error: error instanceof Error ? error.message : 'Unable to create case' }); }
-});
-
-app.patch('/api/cases/:id/status', async (req, res) => {
-  try {
-    const status = statusFromUi(String(req.body?.status ?? '')); if (!status) return res.status(400).json({ error: 'Invalid case status' });
-    const record = await prisma.case.findUnique({ where: { caseNo: req.params.id }, include: { patient: true } }); if (!record) return res.status(404).json({ error: 'Case not found' });
-    const decisionAmount = status === 'APPROVED' ? Number(req.body?.decisionAmount ?? record.amount) : undefined;
-    const updated = await prisma.case.update({ where: { id: record.id }, data: { status, ...(decisionAmount !== undefined ? { decisionAmount } : {}) }, include: { patient: true } });
-    res.json(toUiCase(updated));
-  } catch (error) { console.error('Cases status PATCH error', error); res.status(500).json({ error: 'Unable to update case status' }); }
-});
-
-app.get('/api/visits', async (_req, res) => { try { res.json((await listVisits()).map(toUiVisit)); } catch (error) { console.error('Visits GET error', error); res.status(500).json({ error: 'Unable to load visits' }); } });
-
-app.post('/api/visits', async (req, res) => {
-  try {
-    const patientId = String(req.body?.patientId ?? '').trim(); const type = String(req.body?.type ?? '').trim(); const scheduledAt = String(req.body?.scheduledAt ?? '').trim();
-    if (!patientId || !type || !scheduledAt || Number.isNaN(new Date(scheduledAt).getTime())) return res.status(400).json({ error: 'Patient, visit type and a valid date/time are required' });
-    res.status(201).json(toUiVisit(await createVisit({ patientId, caseId: req.body?.caseId ? String(req.body.caseId).trim() : '', scheduledAt, type, practitioner: String(req.body?.practitioner ?? '').trim(), notes: String(req.body?.notes ?? '').trim() })));
-  } catch (error) { console.error('Visits POST error', error); res.status(error instanceof Error && (error.message === 'Patient not found' || error.message === 'Case not found') ? 404 : 400).json({ error: error instanceof Error ? error.message : 'Unable to create visit' }); }
-});
-
-app.patch('/api/visits/:id/status', async (req, res) => {
-  try {
-    const status = visitStatusFromUi(String(req.body?.status ?? '')); if (!status) return res.status(400).json({ error: 'Invalid visit status' });
-    const record = await prisma.visit.findUnique({ where: { visitNo: req.params.id }, include: { patient: true, case: true } }); if (!record) return res.status(404).json({ error: 'Visit not found' });
-    const updated = await prisma.visit.update({ where: { id: record.id }, data: { status }, include: { patient: true, case: true } }); res.json(toUiVisit(updated));
-  } catch (error) { console.error('Visits status PATCH error', error); res.status(500).json({ error: 'Unable to update visit status' }); }
-});
-
-app.get('/api/invoices', async (_req, res) => {
-  try {
-    const records = await prisma.invoice.findMany({ orderBy: { issueDate: 'desc' }, include: { patient: true, case: true, payments: true } });
-    res.json(records.map(toUiInvoice));
-  } catch (error) { console.error('Invoices GET error', error); res.status(500).json({ error: 'Unable to load invoices' }); }
-});
-
-app.post('/api/invoices', async (req, res) => {
-  try {
-    const patientNo = String(req.body?.patientId ?? '').trim(); const caseNo = String(req.body?.caseId ?? '').trim(); const amount = Number(req.body?.amount);
-    const dueDate = new Date(String(req.body?.dueDate ?? ''));
-    if (!patientNo || !Number.isFinite(amount) || amount < 0 || Number.isNaN(dueDate.getTime())) return res.status(400).json({ error: 'Patient, valid amount and due date are required' });
-    const patient = await prisma.patient.findUnique({ where: { patientNo } }); if (!patient) return res.status(404).json({ error: 'Patient not found' });
-    let caseId = null;
-    if (caseNo) { const record = await prisma.case.findUnique({ where: { caseNo } }); if (!record) return res.status(404).json({ error: 'Case not found' }); if (record.patientId !== patient.id) return res.status(400).json({ error: 'Case does not belong to selected patient' }); caseId = record.id; }
-    const invoiceNo = await nextNumber(prisma.invoice, `INV-${new Date().getFullYear()}`, 'invoiceNo', 6);
-    const created = await prisma.invoice.create({ data: { invoiceNo, patientId: patient.id, caseId, dueDate, amount, status: 'ISSUED' }, include: { patient: true, case: true, payments: true } });
-    res.status(201).json(toUiInvoice(created));
-  } catch (error) { console.error('Invoices POST error', error); res.status(500).json({ error: error instanceof Error ? error.message : 'Unable to create invoice' }); }
-});
-
-app.patch('/api/invoices/:id/status', async (req, res) => {
-  try {
-    const status = invoiceStatusFromUi(String(req.body?.status ?? '')); if (!status) return res.status(400).json({ error: 'Invalid invoice status' });
-    const record = await prisma.invoice.findUnique({ where: { invoiceNo: req.params.id } }); if (!record) return res.status(404).json({ error: 'Invoice not found' });
-    const updated = await prisma.invoice.update({ where: { id: record.id }, data: { status }, include: { patient: true, case: true, payments: true } }); res.json(toUiInvoice(updated));
-  } catch (error) { console.error('Invoice status PATCH error', error); res.status(500).json({ error: 'Unable to update invoice status' }); }
-});
-
-app.post('/api/invoices/:id/payments', async (req, res) => {
-  try {
-    const amount = Number(req.body?.amount); const method = paymentMethodFromUi(String(req.body?.method ?? '')); const reference = String(req.body?.reference ?? '').trim();
-    if (!Number.isFinite(amount) || amount <= 0 || !method) return res.status(400).json({ error: 'Valid amount and payment method are required' });
-    const invoice = await prisma.invoice.findUnique({ where: { invoiceNo: req.params.id }, include: { payments: true } }); if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-    const completedPaid = invoice.payments.filter(p => p.status === 'COMPLETED').reduce((sum, p) => sum + Number(p.amount), 0);
-    const balance = Number(invoice.amount) - completedPaid;
-    if (amount > balance) return res.status(400).json({ error: `Payment exceeds outstanding balance of €${balance.toFixed(2)}` });
-    const paymentNo = await nextNumber(prisma.payment, 'PAY', 'paymentNo', 6);
-    await prisma.payment.create({ data: { paymentNo, invoiceId: invoice.id, patientId: invoice.patientId, amount, method, reference: reference || null, status: 'COMPLETED' } });
-    const newPaid = completedPaid + amount;
-    const status = newPaid >= Number(invoice.amount) ? 'PAID' : 'PARTIALLY_PAID';
-    const updated = await prisma.invoice.update({ where: { id: invoice.id }, data: { status }, include: { patient: true, case: true, payments: true } });
-    res.status(201).json(toUiInvoice(updated));
-  } catch (error) { console.error('Invoice payment POST error', error); res.status(500).json({ error: error instanceof Error ? error.message : 'Unable to record payment' }); }
-});
-
-const distPath = path.join(__dirname, 'dist');
-app.use(express.static(distPath));
-app.get('/{*splat}', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
-const server = app.listen(port, () => console.log(`RESQ ERP server listening on port ${port}`));
-async function shutdown(signal) { console.log(`${signal} received, shutting down`); server.close(async () => { await prisma.$disconnect(); process.exit(0); }); }
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+const distPath=path.join(__dirname,'dist');app.use(express.static(distPath));app.get('/{*splat}',(_req,res)=>res.sendFile(path.join(distPath,'index.html')));
+const server=app.listen(port,()=>console.log(`RESQ ERP server listening on port ${port}`));
+async function shutdown(signal){console.log(`${signal} received, shutting down`);server.close(async()=>{await prisma.$disconnect();process.exit(0)})}process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
