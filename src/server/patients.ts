@@ -5,7 +5,7 @@ export async function listPatients(search = '') {
   return prisma.patient.findMany({
     where: q ? {
       OR: [
-        { patientId: { contains: q, mode: 'insensitive' } },
+        { patientNo: { contains: q, mode: 'insensitive' } },
         { firstName: { contains: q, mode: 'insensitive' } },
         { lastName: { contains: q, mode: 'insensitive' } },
         { phone: { contains: q, mode: 'insensitive' } },
@@ -24,10 +24,10 @@ export async function createPatient(input: {
   email?: string;
 }) {
   const count = await prisma.patient.count();
-  const patientId = `RSQ-P-${String(count + 1).padStart(6, '0')}`;
+  const patientNo = `RSQ-P-${String(count + 1).padStart(6, '0')}`;
   return prisma.patient.create({
     data: {
-      patientId,
+      patientNo,
       firstName: input.firstName,
       lastName: input.lastName,
       dateOfBirth: input.dateOfBirth,
@@ -40,6 +40,6 @@ export async function createPatient(input: {
 export async function getPatient(id: string) {
   return prisma.patient.findUnique({
     where: { id },
-    include: { cases: true, visits: true, invoices: true, medicines: true },
+    include: { cases: true, visits: true, invoices: true, payments: true, medications: { include: { medicine: true } } },
   });
 }
