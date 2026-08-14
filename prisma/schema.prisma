@@ -5,19 +5,84 @@ datasource db {
   provider = "postgresql"
   url = env("DATABASE_URL")
 }
-enum PatientStatus { ACTIVE INACTIVE }
-enum CaseStatus { PENDING UNDER_REVIEW APPROVED REJECTED }
-enum VisitStatus { SCHEDULED COMPLETED CANCELLED }
-enum InvoiceStatus { DRAFT ISSUED PARTIALLY_PAID PAID OVERDUE }
-enum InvoiceType { CASH CREDIT }
-enum PaymentMethod { BANK_TRANSFER CARD CASH }
-enum PaymentStatus { PENDING COMPLETED REFUNDED }
-enum MedicineStatus { ACTIVE INACTIVE }
-enum EmployeeRole { ADMIN MANAGER CASE_OFFICER FINANCE WAREHOUSE READ_ONLY DOCTOR NURSE ACCOUNTING }
-enum StockMovementType { RECEIPT ISSUE ADJUSTMENT RETURN WASTE }
-enum ExpenseCategory { SUPPLIES MEDICINE LABOUR SERVICES RENT UTILITIES SOFTWARE OTHER }
-enum ReceiptType { PAYMENT }
-enum PurchaseOrderStatus { DRAFT SENT PARTIALLY_RECEIVED RECEIVED CANCELLED }
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+}
+enum CaseStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+enum VisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+enum InvoiceType {
+  CASH
+  CREDIT
+}
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  CASH
+}
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+}
+enum MedicineStatus {
+  ACTIVE
+  INACTIVE
+}
+enum EmployeeRole {
+  ADMIN
+  MANAGER
+  CASE_OFFICER
+  FINANCE
+  WAREHOUSE
+  READ_ONLY
+  DOCTOR
+  NURSE
+  ACCOUNTING
+}
+enum StockMovementType {
+  RECEIPT
+  ISSUE
+  ADJUSTMENT
+  RETURN
+  WASTE
+}
+enum ExpenseCategory {
+  SUPPLIES
+  MEDICINE
+  LABOUR
+  SERVICES
+  RENT
+  UTILITIES
+  SOFTWARE
+  OTHER
+}
+enum ReceiptType {
+  PAYMENT
+}
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
 
 model Patient {
  id String @id @default(cuid())
