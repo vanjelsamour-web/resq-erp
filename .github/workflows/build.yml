@@ -57,3 +57,5 @@ jobs:
         run: npx prisma validate
       - name: Build application
         run: npm run build
+      - name: Build production Docker image
+        run: docker build --pull -t resq-erp:ci .
