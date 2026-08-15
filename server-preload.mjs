@@ -7,16 +7,18 @@ import { installOcr } from './ocr-enhancements.mjs';
 import { installPdf } from './pdf-enhancements.mjs';
 import { installAuth } from './auth-enhancements.mjs';
 
-function moveAuthRoutesFirst(app) {
+function moveApiRoutesFirst(app) {
   // Express 5 exposes the router as `app.router`; Express 4 used `_router`.
-  // Support both so auth endpoints are always evaluated before the SPA fallback.
+  // Enhancement routes are installed from the listen hook, after the SPA
+  // fallback. Move every /api route before the frontend fallback so that
+  // API requests are never answered with index.html.
   const router = app.router || app._router;
   if (!router?.stack) return;
-  const auth = router.stack.filter(layer => layer.route?.path?.startsWith('/api/auth'));
-  if (!auth.length) return;
-  router.stack = router.stack.filter(layer => !auth.includes(layer));
+  const api = router.stack.filter(layer => layer.route?.path?.startsWith('/api/'));
+  if (!api.length) return;
+  router.stack = router.stack.filter(layer => !api.includes(layer));
   const jsonIndex = router.stack.findIndex(layer => layer.name === 'jsonParser');
-  router.stack.splice(jsonIndex >= 0 ? jsonIndex + 1 : 0, 0, ...auth);
+  router.stack.splice(jsonIndex >= 0 ? jsonIndex + 1 : 0, 0, ...api);
 }
 
 const originalListen = express.application.listen;
@@ -30,7 +32,7 @@ if (!express.application.__resqListenPatched) {
     installOcr(this);
     installPdf(this);
     installAuth(this);
-    moveAuthRoutesFirst(this);
+    moveApiRoutesFirst(this);
     return originalListen.apply(this, args);
   };
 }
