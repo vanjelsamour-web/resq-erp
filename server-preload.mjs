@@ -6,12 +6,9 @@ import { installEmployeeEnhancements } from './employee-enhancements.mjs';
 import { installOcr } from './ocr-enhancements.mjs';
 import { installPdf } from './pdf-enhancements.mjs';
 import { installAuth } from './auth-enhancements.mjs';
+import { installProcurementEnhancements } from './procurement-enhancements.mjs';
 
 function moveApiRoutesFirst(app) {
-  // Express 5 exposes the router as `app.router`; Express 4 used `_router`.
-  // Enhancement routes are installed from the listen hook, after the SPA
-  // fallback. Move every /api route before the frontend fallback so that
-  // API requests are never answered with index.html.
   const router = app.router || app._router;
   if (!router?.stack) return;
   const api = router.stack.filter(layer => layer.route?.path?.startsWith('/api/'));
@@ -32,6 +29,7 @@ if (!express.application.__resqListenPatched) {
     installOcr(this);
     installPdf(this);
     installAuth(this);
+    installProcurementEnhancements(this);
     moveApiRoutesFirst(this);
     return originalListen.apply(this, args);
   };
