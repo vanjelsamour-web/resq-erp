@@ -4,7 +4,6 @@ const prisma = new PrismaClient();
 const movementUi = { RECEIPT:'Receipt', ISSUE:'Issue', ADJUSTMENT:'Adjustment', RETURN:'Return', WASTE:'Waste' };
 const paymentMethods = { 'Bank transfer':'BANK_TRANSFER', Card:'CARD', Cash:'CASH' };
 const invoiceUi = { DRAFT:'Draft', ISSUED:'Issued', PARTIALLY_PAID:'Partially paid', PAID:'Paid', OVERDUE:'Overdue' };
-
 const money = n => Number(Number(n || 0).toFixed(2));
 const num = n => Number(n || 0);
 const patientName = p => `${p?.firstName || ''} ${p?.lastName || ''}`.trim();
@@ -79,13 +78,24 @@ export function installEnhancements(app){
 
   app.patch('/api/invoices/:id',async(req,res)=>{try{
     const inv=await prisma.invoice.findUnique({where:{invoiceNo:req.params.id},include:{payments:true,patient:true,case:true}});if(!inv)return res.status(404).json({error:'Invoice not found'});
-    if(inv.status!=='DRAFT' && req.body?.force!==true)return res.status(400).json({error:'Issued invoices are locked. Use a Credit Note for corrections.'});
+    const paid=inv.payments.filter(p=>p.status==='COMPLETED').reduce((s,p)=>s+num(p.amount),0);
+    if(paid>0 && req.body?.force!==true)return res.status(400).json({error:'This invoice has payments. Use a Credit Note for corrections.'});
+    if(inv.status==='PAID' && req.body?.force!==true)return res.status(400).json({error:'Paid invoices cannot be edited directly. Use a Credit Note.'});
     const data={};for(const k of ['dueDate','notes'])if(req.body?.[k]!==undefined)data[k]=k==='dueDate'?new Date(req.body[k]):req.body[k];
     if(req.body?.type!==undefined && ['CASH','CREDIT'].includes(req.body.type))data.type=req.body.type;
     if(req.body?.amount!==undefined){const amount=Number(req.body.amount);const vatRate=Number(req.body.vatRate??inv.vatRate??0);if(!Number.isFinite(amount)||amount<0)return res.status(400).json({error:'Invalid amount'});data.amount=amount;data.vatRate=vatRate;data.vatAmount=money(amount*vatRate/100);data.netAmount=money(amount-data.vatAmount);}
-    const u=await prisma.invoice.update({where:{id:inv.id},data,include:{patient:true,case:true,payments:true}});await audit('UPDATE','Invoice',u.invoiceNo,'Invoice updated');
-    const paid=u.payments.filter(p=>p.status==='COMPLETED').reduce((s,p)=>s+num(p.amount),0);res.json({...u,id:u.invoiceNo,patientId:u.patient.patientNo,patientName:patientName(u.patient),caseId:u.case?.caseNo||null,date:u.issueDate.toISOString().slice(0,10),dueDate:u.dueDate.toISOString().slice(0,10),amount:num(u.amount),netAmount:num(u.netAmount),vatRate:num(u.vatRate),vatAmount:num(u.vatAmount),paid,status:invoiceUi[u.status]||u.status,databaseId:u.id,type:u.type});
+    const u=await prisma.invoice.update({where:{id:inv.id},data,include:{patient:true,case:true,payments:true}});await audit('UPDATE','Invoice',u.invoiceNo,'Invoice corrected');
+    const paidAfter=u.payments.filter(p=>p.status==='COMPLETED').reduce((s,p)=>s+num(p.amount),0);res.json({...u,id:u.invoiceNo,patientId:u.patient.patientNo,patientName:patientName(u.patient),caseId:u.case?.caseNo||null,date:u.issueDate.toISOString().slice(0,10),dueDate:u.dueDate.toISOString().slice(0,10),amount:num(u.amount),netAmount:num(u.netAmount),vatRate:num(u.vatRate),vatAmount:num(u.vatAmount),paid:paidAfter,status:invoiceUi[u.status]||u.status,databaseId:u.id,type:u.type});
   }catch(e){console.error(e);res.status(500).json({error:'Unable to update invoice'})}});
+
+  app.delete('/api/invoices/:id',async(req,res)=>{try{
+    const inv=await prisma.invoice.findUnique({where:{invoiceNo:req.params.id},include:{payments:true,receipts:true,creditNotes:true}});if(!inv)return res.status(404).json({error:'Invoice not found'});
+    const paid=inv.payments.filter(p=>p.status==='COMPLETED').reduce((s,p)=>s+num(p.amount),0);
+    if(paid>0||inv.receipts.length||inv.creditNotes.length)return res.status(400).json({error:'Invoice has financial transactions. Use a Credit Note instead of deleting it.'});
+    await prisma.$transaction(async tx=>{await tx.invoice.delete({where:{id:inv.id}})});
+    await audit('DELETE','Invoice',inv.invoiceNo,'Invoice deleted');
+    res.json({ok:true,id:inv.invoiceNo});
+  }catch(e){console.error(e);res.status(500).json({error:'Unable to delete invoice'})}});
 
   app.post('/api/invoices/:id/settle',async(req,res)=>{try{
     const inv=await prisma.invoice.findUnique({where:{invoiceNo:req.params.id},include:{payments:true,patient:true,case:true}});if(!inv)return res.status(404).json({error:'Invoice not found'});
