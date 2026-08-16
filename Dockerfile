@@ -32,4 +32,6 @@ COPY server.mjs server-preload.mjs server-enhancements.mjs invoice-create-enhanc
 
 EXPOSE 3000
 
-CMD ["node", "--import", "./server-preload.mjs", "server.mjs"]
+# Keep the Zima database schema synchronized with the Prisma schema before the API starts.
+# --accept-data-loss=false prevents destructive schema changes from being applied automatically.
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss=false && node --import ./server-preload.mjs server.mjs"]
