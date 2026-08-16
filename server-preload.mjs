@@ -1,4 +1,5 @@
 import express from 'express';
+import { installPermissions } from './permissions-enhancements.mjs';
 import { installEnhancements } from './server-enhancements.mjs';
 import { installInvoiceCreate } from './invoice-create-enhancements.mjs';
 import { installPatientImport } from './patient-import-enhancements.mjs';
@@ -22,6 +23,7 @@ const originalListen = express.application.listen;
 if (!express.application.__resqListenPatched) {
   express.application.__resqListenPatched = true;
   express.application.listen = function (...args) {
+    installPermissions(this);
     installEnhancements(this);
     installInvoiceCreate(this);
     installPatientImport(this);
