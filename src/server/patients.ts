@@ -1,17 +1,21 @@
 import { prisma } from './db';
 
-export async function listPatients(search = '') {
+export async function listPatients(search = '', status?: 'ACTIVE' | 'INACTIVE' | 'ALL') {
   const q = search.trim();
+  const statusFilter = status && status !== 'ALL' ? { status } : {};
   return prisma.patient.findMany({
-    where: q ? {
-      OR: [
-        { patientNo: { contains: q, mode: 'insensitive' } },
-        { firstName: { contains: q, mode: 'insensitive' } },
-        { lastName: { contains: q, mode: 'insensitive' } },
-        { phone: { contains: q, mode: 'insensitive' } },
-        { email: { contains: q, mode: 'insensitive' } },
-      ],
-    } : undefined,
+    where: {
+      ...statusFilter,
+      ...(q ? {
+        OR: [
+          { patientNo: { contains: q, mode: 'insensitive' } },
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+        ],
+      } : {}),
+    },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -38,6 +42,29 @@ export async function createPatient(input: {
       email: input.email,
     },
   });
+}
+
+export async function updatePatient(patientNo: string, input: {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: Date;
+  phone?: string;
+  email?: string;
+}) {
+  return prisma.patient.update({
+    where: { patientNo },
+    data: {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      dateOfBirth: input.dateOfBirth,
+      phone: input.phone,
+      email: input.email,
+    },
+  });
+}
+
+export async function setPatientStatus(patientNo: string, status: 'ACTIVE' | 'INACTIVE') {
+  return prisma.patient.update({ where: { patientNo }, data: { status } });
 }
 
 export async function getPatient(id: string) {
