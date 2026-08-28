@@ -8,6 +8,8 @@ on:
       - 'prisma/**'
       - 'package.json'
       - '.github/workflows/database.yml'
+      - 'server.mjs'
+      - 'api/**'
 
 jobs:
   database:
