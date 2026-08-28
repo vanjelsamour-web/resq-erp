@@ -130,8 +130,8 @@ model Patient {
  stockMovements StockMovement[]
  expenses Expense[]
  @@index([lastName, firstName])
- @@index([phone])
- @@index([email])
+@@index([phone])
+@@index([email])
 }
 model Case {
  id String @id @default(cuid())
@@ -150,8 +150,8 @@ model Case {
  stockMovements StockMovement[]
  expenses Expense[]
  @@index([patientId])
- @@index([status])
- @@index([createdAt])
+@@index([status])
+@@index([createdAt])
 }
 model Visit {
  id String @id @default(cuid())
@@ -168,8 +168,8 @@ model Visit {
  patient Patient @relation(fields:[patientId],references:[id],onDelete:Restrict)
  case Case? @relation(fields:[caseId],references:[id],onDelete:SetNull)
  @@index([patientId,scheduledAt])
- @@index([caseId])
- @@index([status])
+@@index([caseId])
+@@index([status])
 }
 model Invoice {
  id String @id @default(cuid())
@@ -193,9 +193,9 @@ model Invoice {
  receipts Receipt[]
  creditNotes CreditNote[]
  @@index([patientId])
- @@index([caseId])
- @@index([status])
- @@index([dueDate])
+@@index([caseId])
+@@index([status])
+@@index([dueDate])
 }
 model Payment {
  id String @id @default(cuid())
@@ -214,8 +214,8 @@ model Payment {
  patient Patient @relation(fields:[patientId],references:[id],onDelete:Restrict)
  receipt Receipt?
  @@index([invoiceId])
- @@index([patientId])
- @@index([paidAt])
+@@index([patientId])
+@@index([paidAt])
 }
 model Receipt {
  id String @id @default(cuid())
@@ -231,7 +231,7 @@ model Receipt {
  payment Payment @relation(fields:[paymentId],references:[id],onDelete:Restrict)
  patient Patient @relation(fields:[patientId],references:[id],onDelete:Restrict)
  @@index([invoiceId])
- @@index([patientId])
+@@index([patientId])
 }
 model CreditNote {
  id String @id @default(cuid())
@@ -255,7 +255,7 @@ model Medicine {
  patients PatientMedicine[]
  inventoryItems InventoryItem[]
  @@index([name])
- @@index([status])
+@@index([status])
 }
 model PatientMedicine {
  id String @id @default(cuid())
@@ -269,8 +269,8 @@ model PatientMedicine {
  patient Patient @relation(fields:[patientId],references:[id],onDelete:Cascade)
  medicine Medicine @relation(fields:[medicineId],references:[id],onDelete:Restrict)
  @@index([patientId])
- @@index([medicineId])
- @@index([prescribedAt])
+@@index([medicineId])
+@@index([prescribedAt])
 }
 model Employee {
  id String @id @default(cuid())
@@ -286,7 +286,7 @@ model Employee {
  expenses Expense[]
  auditLogs AuditLog[]
  @@index([role])
- @@index([active])
+@@index([active])
 }
 model Supplier {
  id String @id @default(cuid())
@@ -321,8 +321,8 @@ model InventoryItem {
  movements StockMovement[]
  purchaseOrderItems PurchaseOrderItem[]
  @@index([category])
- @@index([medicineId])
- @@index([expiryDate])
+@@index([medicineId])
+@@index([expiryDate])
 }
 model StockMovement {
  id String @id @default(cuid())
@@ -343,9 +343,9 @@ model StockMovement {
  patient Patient? @relation(fields:[patientId],references:[id],onDelete:SetNull)
  case Case? @relation(fields:[caseId],references:[id],onDelete:SetNull)
  @@index([itemId,createdAt])
- @@index([employeeId,createdAt])
- @@index([patientId])
- @@index([caseId])
+@@index([employeeId,createdAt])
+@@index([patientId])
+@@index([caseId])
 }
 model SupplierInvoice {
  id String @id @default(cuid())
@@ -363,7 +363,7 @@ model SupplierInvoice {
  supplier Supplier @relation(fields:[supplierId],references:[id],onDelete:Restrict)
  expenses Expense[]
  @@index([supplierId])
- @@index([issueDate])
+@@index([issueDate])
 }
 model PurchaseOrder {
  id String @id @default(cuid())
@@ -377,7 +377,7 @@ model PurchaseOrder {
  supplier Supplier? @relation(fields:[supplierId],references:[id],onDelete:SetNull)
  items PurchaseOrderItem[]
  @@index([supplierId])
- @@index([status])
+@@index([status])
 }
 model PurchaseOrderItem {
  id String @id @default(cuid())
@@ -389,7 +389,7 @@ model PurchaseOrderItem {
  purchaseOrder PurchaseOrder @relation(fields:[purchaseOrderId],references:[id],onDelete:Cascade)
  inventoryItem InventoryItem @relation(fields:[inventoryItemId],references:[id],onDelete:Restrict)
  @@index([purchaseOrderId])
- @@index([inventoryItemId])
+@@index([inventoryItemId])
 }
 model Expense {
  id String @id @default(cuid())
@@ -410,8 +410,8 @@ model Expense {
  patient Patient? @relation(fields:[patientId],references:[id],onDelete:SetNull)
  employee Employee? @relation(fields:[employeeId],references:[id],onDelete:SetNull)
  @@index([category])
- @@index([caseId])
- @@index([supplierInvoiceId])
+@@index([caseId])
+@@index([supplierInvoiceId])
 }
 model AuditLog {
  id String @id @default(cuid())
@@ -423,5 +423,5 @@ model AuditLog {
  createdAt DateTime @default(now())
  employee Employee? @relation(fields:[employeeId],references:[id],onDelete:SetNull)
  @@index([createdAt])
- @@index([entity,entityId])
+@@index([entity,entityId])
 }
