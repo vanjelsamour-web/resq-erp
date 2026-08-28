@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "prisma generate && prisma db push && tsc -b && vite build",
+    "build": "prisma generate && tsc -b && vite build",
     "start": "node server.mjs",
     "preview": "vite preview",
     "db:generate": "prisma generate",
@@ -16,7 +16,6 @@
     "@prisma/client": "6.19.0",
     "@vitejs/plugin-react": "latest",
     "express": "^5.1.0",
-    "lucide-react": "latest",
     "pdfkit": "0.17.2",
     "prisma": "6.19.0",
     "react": "latest",
