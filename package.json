@@ -18,16 +18,17 @@
     "express": "^5.1.0",
     "lucide-react": "latest",
     "pdfkit": "0.17.2",
+    "prisma": "6.19.0",
     "react": "latest",
     "react-dom": "latest",
     "tesseract.js": "7.0.0",
-    "prisma": "6.19.0",
     "vite": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/pdfkit": "0.13.9",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "typescript": "latest"
   }
 }
