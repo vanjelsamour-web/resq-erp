@@ -16,6 +16,7 @@
     "@prisma/client": "6.19.0",
     "@vitejs/plugin-react": "latest",
     "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
     "pdfkit": "0.17.2",
     "prisma": "6.19.0",
     "react": "latest",
