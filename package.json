@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "prisma generate && prisma db push && tsc -b && vite build",
     "start": "node server.mjs",
     "preview": "vite preview",
     "db:generate": "prisma generate",
@@ -17,12 +17,11 @@
     "@vitejs/plugin-react": "latest",
     "express": "^5.1.0",
     "lucide-react": "latest",
-    "pdfkit": "0.17.2",
-    "prisma": "6.19.0",
+    "pdfkit": "0.17.0",
     "react": "latest",
     "react-dom": "latest",
     "tesseract.js": "7.0.0",
-    "typescript": "latest",
+    "prisma": "6.19.0",
     "vite": "latest"
   },
   "devDependencies": {
