@@ -71,5 +71,11 @@ app.get('/api/audit',async(_q,res)=>{try{res.json(await prisma.auditLog.findMany
 app.post('/api/invoices/ocr',async(req,res)=>{res.status(501).json({error:'OCR service is not configured yet. Upload processing is reserved for the OCR integration.'})});
 
 const distPath=path.join(__dirname,'dist');app.use(express.static(distPath));app.get('/{*splat}',(_req,res)=>res.sendFile(path.join(distPath,'index.html')));
-const server=app.listen(port,()=>console.log(`RESQ ERP server listening on port ${port}`));
-async function shutdown(signal){console.log(`${signal} received, shutting down`);server.close(async()=>{await prisma.$disconnect();process.exit(0)})}process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
+
+export default app;
+
+if (!process.env.VERCEL) {
+  const server=app.listen(port,()=>console.log(`RESQ ERP server listening on port ${port}`));
+  async function shutdown(signal){console.log(`${signal} received, shutting down`);server.close(async()=>{await prisma.$disconnect();process.exit(0)})}
+  process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
+}
