@@ -1,4 +1,8 @@
-import { createPatient, getPatientByPatientNo, listPatients, setPatientStatus, updatePatient } from '../src/server/patients';
+import { PrismaClient } from '@prisma/client';
+
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const prisma = globalForPrisma.prisma ?? new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 function toUiPatient(patient: any) {
   const lastVisit = patient.visits?.length
@@ -24,24 +28,87 @@ function parseName(name: unknown) {
   return { firstName, lastName: parts.join(' ') || firstName };
 }
 
+const patientInclude = {
+  cases: true,
+  visits: true,
+  invoices: true,
+  payments: true,
+  medications: { include: { medicine: true } },
+};
+
+async function listPatients(search = '', status: 'ACTIVE' | 'INACTIVE' | 'ALL' = 'ACTIVE') {
+  const q = search.trim();
+  const statusFilter = status !== 'ALL' ? { status } : {};
+  return prisma.patient.findMany({
+    where: {
+      ...statusFilter,
+      ...(q ? {
+        OR: [
+          { patientNo: { contains: q, mode: 'insensitive' } },
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+        ],
+      } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    include: { visits: true },
+  });
+}
+
+async function getPatientByPatientNo(patientNo: string) {
+  return prisma.patient.findUnique({ where: { patientNo }, include: patientInclude });
+}
+
+async function createPatient(input: {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: Date;
+  phone?: string;
+  email?: string;
+}) {
+  const count = await prisma.patient.count();
+  let patientNo = `RSQ-P-${String(count + 1).padStart(6, '0')}`;
+  while (await prisma.patient.findUnique({ where: { patientNo } })) {
+    patientNo = `RSQ-P-${String(Number(patientNo.slice(-6)) + 1).padStart(6, '0')}`;
+  }
+  return prisma.patient.create({
+    data: {
+      patientNo,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      dateOfBirth: input.dateOfBirth,
+      phone: input.phone,
+      email: input.email,
+    },
+  });
+}
+
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') {
       const search = typeof req.query?.search === 'string' ? req.query.search : '';
       const patientNo = typeof req.query?.id === 'string' ? req.query.id : '';
-      const status = typeof req.query?.status === 'string' ? req.query.status : 'ACTIVE';
+      const statusRaw = typeof req.query?.status === 'string' ? req.query.status.toUpperCase() : 'ACTIVE';
+      const status: 'ACTIVE' | 'INACTIVE' | 'ALL' = statusRaw === 'ALL' ? 'ALL' : statusRaw === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+
       if (patientNo) {
         const patient = await getPatientByPatientNo(patientNo);
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
-        return res.status(200).json({ ...toUiPatient(patient), history: {
-          cases: patient.cases,
-          visits: patient.visits,
-          invoices: patient.invoices,
-          payments: patient.payments,
-          medications: patient.medications,
-        }});
+        return res.status(200).json({
+          ...toUiPatient(patient),
+          history: {
+            cases: patient.cases,
+            visits: patient.visits,
+            invoices: patient.invoices,
+            payments: patient.payments,
+            medications: patient.medications,
+          },
+        });
       }
-      const patients = await listPatients(search, status === 'ALL' ? 'ALL' : status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE');
+
+      const patients = await listPatients(search, status);
       return res.status(200).json(patients.map(toUiPatient));
     }
 
@@ -64,19 +131,27 @@ export default async function handler(req: any, res: any) {
       const patientNo = typeof req.query?.id === 'string' ? req.query.id : '';
       if (!patientNo) return res.status(400).json({ error: 'Patient ID is required' });
       const body = req.body ?? {};
+
       if (body.status === 'ACTIVE' || body.status === 'INACTIVE') {
-        const patient = await setPatientStatus(patientNo, body.status);
+        const patient = await prisma.patient.update({
+          where: { patientNo },
+          data: { status: body.status },
+        });
         return res.status(200).json(toUiPatient(patient));
       }
+
       const name = String(body.name ?? '').trim();
       if (!name) return res.status(400).json({ error: 'Full name is required' });
       const { firstName, lastName } = parseName(name);
-      const patient = await updatePatient(patientNo, {
-        firstName,
-        lastName,
-        dateOfBirth: body.dob ? new Date(body.dob) : undefined,
-        phone: body.phone ? String(body.phone) : undefined,
-        email: body.email ? String(body.email) : undefined,
+      const patient = await prisma.patient.update({
+        where: { patientNo },
+        data: {
+          firstName,
+          lastName,
+          dateOfBirth: body.dob ? new Date(body.dob) : null,
+          phone: body.phone ? String(body.phone) : null,
+          email: body.email ? String(body.email) : null,
+        },
       });
       return res.status(200).json(toUiPatient(patient));
     }
