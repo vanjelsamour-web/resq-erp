@@ -4,13 +4,11 @@
     { "src": "server.mjs", "use": "@vercel/node" },
     { "src": "api/auth.mjs", "use": "@vercel/node" },
     { "src": "api/users.mjs", "use": "@vercel/node" },
-    { "src": "api/patients.ts", "use": "@vercel/node" },
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
   ],
   "routes": [
     { "src": "/api/auth(?:/(.*))?", "dest": "/api/auth.mjs" },
     { "src": "/api/users(?:/(.*))?", "dest": "/api/users.mjs" },
-    { "src": "/api/patients", "dest": "/api/patients.ts" },
     { "src": "/api/(.*)", "dest": "/server.mjs" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
