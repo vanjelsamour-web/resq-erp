@@ -17,7 +17,7 @@
     "@vitejs/plugin-react": "latest",
     "express": "^5.1.0",
     "lucide-react": "latest",
-    "pdfkit": "0.17.0",
+    "pdfkit": "0.17.2",
     "react": "latest",
     "react-dom": "latest",
     "tesseract.js": "7.0.0",
